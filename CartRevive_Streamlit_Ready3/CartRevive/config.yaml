@@ -1,0 +1,61 @@
+# Single source of truth for every business rule. Code and docs both read this file.
+seed: 20261022
+sim_start: "2026-01-01T00:00:00"
+sim_end: "2026-09-30T23:59:59"
+year: 2026
+
+scale:                      # full dataset; --scale 0.02 gives the starter dataset
+  carts: 50000
+  abandoned_carts: 20000    # target; actual count is derived from the rule below
+  sends: 10000              # minimum clean dispatched sends (decision=sent); scales with --scale
+  customers: 18000
+  campaigns: 24
+
+rules:
+  abandonment_window_minutes: 60    # cart is abandoned when inactivity >= 60 min (boundary inclusive)
+  attribution_window_days: 7        # order must be within 7 days of the touch (inclusive)
+  attribution_model: last_click     # latest click before order wins; opens alone earn no credit
+  frequency_cap: {max_sends: 2, per_days: 7}   # per customer, across channels
+  late_purchase_after_days: 3       # purchase after this many days = "late purchase"
+  quiet_hours: {start: 21, end: 8}  # no SMS in this local-hour window
+  send_delay_minutes: {reminder: 60, discount_10: 180, urgency: 1440, free_ship: 360}
+
+channels: [email, sms]
+channel_mix: {email: 0.7, sms: 0.3}
+variants:                            # campaign variant weights
+  reminder: 0.35
+  discount_10: 0.30
+  urgency: 0.15
+  free_ship: 0.20
+
+anomalies:                           # injected AFTER clean baseline, each labelled in ground_truth
+  message_after_optout: 40
+  abandoned_after_purchase: 40
+  attribution_double_count: 40
+  stale_cart_total: 40
+
+behavior:                            # latent shopper behaviour; outcomes are DERIVED from rules, not drawn
+  purchase_prob: 0.70                # share of carts whose shopper eventually buys unprompted
+  late_return_share: 0.15            # of buyers, share who return only after 60-180 min (cart abandoned first)
+  qty_update_prob: 0.25
+  browse_only_session_share: 0.20
+  consent:
+    opt_in_initial: {email: 0.85, sms: 0.55}
+    withdraw: {email: 0.08, sms: 0.12}
+    rejoin: 0.10
+    late_opt_in: 0.10
+
+campaign:
+  min_cart_value: 100           # targeting rule: only carts worth >= this are contacted (tuned for ~10k sends at full scale)
+  followup_after_hours: 48      # second message (seq 02, different variant) if first was sent
+  cart_expiry_days: 30          # abandoned cart with no purchase becomes 'expired'
+  dispatch_latency_minutes: 1   # sent_at = decision_ts + latency; ALL rule checks evaluated at sent_at
+
+response:                       # shopper response model (latent behaviour; outcomes still flow from rules)
+  deliver: {email: 0.97, sms: 0.96}
+  email_open: 0.40
+  email_click_given_open: 0.30
+  sms_click: 0.15
+  click_to_purchase: {reminder: 0.25, discount_10: 0.40, urgency: 0.30, free_ship: 0.35}
+  cancel_rate: 0.03
+  refund_rate: 0.02
